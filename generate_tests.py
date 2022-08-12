@@ -11,7 +11,8 @@ def generate_test_folder1():
     dir = TEST_FOLDER/Path('MyAwesomePhotos')
     dir.mkdir()
     for _ in range(30):
-        random_id = ''.join(random.sample(string.digits, 6))
+        random_id = (random.choice(string.ascii_uppercase) +
+                     ''.join(random.sample(string.digits, 6)))
         filename = f'Image{random_id}.jpg'
         with open(dir/filename, 'w') as f:
             pass

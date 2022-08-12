@@ -62,17 +62,17 @@ def main(
         "[Optional] Rename target folder",
         default=None
     )
-    old_folder = selected_folder
+    old_folder_name = selected_folder
     if new_folder_name:
         try:
             new_path = selected_folder.with_name(new_folder_name)
             selected_folder = selected_folder.rename(new_path)
             print(
-                f'Folder successfully renamed: {old_folder.name} -> {selected_folder.name}\n')
+                f'Folder successfully renamed: {old_folder_name.name} -> {selected_folder.name}\n')
         except OSError as e:
             print(
-                f'Could not rename folder {old_folder!r} -> {new_path!r}. {e!r}')
-            undo(old_folder, selected_folder)
+                f'Could not rename folder {old_folder_name!r} -> {new_path!r}. {e!r}')
+            undo(old_folder_name, selected_folder)
             sys.exit(1)
         files = [f for f in selected_folder.iterdir() if f.is_file()]
 
@@ -85,24 +85,28 @@ def main(
         fmt = prompt_format(default=guess_format(selected_folder.name))
     except ValueError as e:
         print(e)
-        undo(old_folder, selected_folder)
+        undo(old_folder_name, selected_folder)
         sys.exit(1)
 
-    # Determine padding required
+    # Determine padding required (for sequence numbers that are numeric)
     ids = []
     for f in files:
         try:
-            ids.append(int(extract_id(f.stem, extractor)))
+            ids.append(extract_id(f.stem, extractor))
         except ValueError as e:
-            print(
-                f"Couldn't extract id from filename {f.stem!r} using extractor {input_extractor!r}. {e}")
-            undo(old_folder, selected_folder)
+            print(e)
+            undo(old_folder_name, selected_folder)
             sys.exit(1)
-    str_lengths = (len(str(id)) for id in ids)
-    pad_to = max(str_lengths)
+    pad_to = 0
+    if all((is_float(id) for id in ids)):
+        str_lengths = (len(str(int(float(id)))) for id in ids)
+        pad_to = max(str_lengths)
+
+    # Sort only if sequence numbers are numeric.
+    if all((is_float(id) for id in ids)):
+        files.sort(key=lambda x: float(extract_id(x.stem, extractor)))
 
     # Rename files
-    files.sort(key=lambda x: float(extract_id(x.stem, extractor)))
     new_files: list[Path] = []
     for file in files:
         new_name = fmt.format(id=extract_id(
@@ -124,7 +128,7 @@ def main(
     confirm = inquirer.confirm('Confirm changes (n to undo changes)',
                                default=True)
     if not confirm:
-        undo(old_folder, selected_folder, files, new_files)
+        undo(old_folder_name, selected_folder, files, new_files)
         print('Files and folders have been renamed back to their original names')
     else:
         print('Have a nice day')
@@ -209,6 +213,15 @@ def undo(old_folder: Path, new_folder: Path, old_files: list[Path] = [], new_fil
         new.rename(old)
 
     new_folder.rename(old_folder)
+
+
+def is_float(s: str) -> bool:
+    try:
+        float(s)
+    except ValueError:
+        return False
+
+    return True
 
 
 if __name__ == '__main__':
