@@ -44,7 +44,7 @@ def main(parent_dir: str):
 
     # Input: Rename folder to new name (Optional)
     renamed_folder = inquirer.text(
-        "[Optional] Rename selected folder",
+        "[Optional] Rename target folder",
         default=None
     )
     old_folder = selected_folder
@@ -127,7 +127,7 @@ def display_files(files: list[Path]):
 
 
 def prompt_extractor(default: str = None) -> str:
-    print('Enter original file naming format, with the sequence number portion replaced with %s. Do no include file format (Eg: .txt, .mkv)')
+    print('Enter original name format, with the sequence number portion replaced with %s. Do no include file format (Eg: .txt, .mkv)')
     extractor = inquirer.text(message='Original name format',
                               default=default)
     print('')
@@ -178,7 +178,7 @@ def guess_format(folder_name: str) -> str:
 
 
 def prompt_format(default: str) -> str:
-    print('Enter desired output file name format, with %s used as placeholder for sequence number. Do not include file format (Eg: .txt, .mkv).')
+    print('Enter output name format, with %s used as placeholder for sequence number. Do not include file format (Eg: .txt, .mkv).')
     extractor = inquirer.text(message='Output name format',
                               default=default)
     print('')
