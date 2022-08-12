@@ -58,20 +58,20 @@ def main(
     display_files(files)
 
     # Input: Rename folder to new name (Optional)
-    renamed_folder = inquirer.text(
+    new_folder_name = inquirer.text(
         "[Optional] Rename target folder",
         default=None
     )
     old_folder = selected_folder
-    if renamed_folder:
+    if new_folder_name:
         try:
-            selected_folder = selected_folder.rename(
-                path/Path(renamed_folder))
+            new_path = selected_folder.with_name(new_folder_name)
+            selected_folder = selected_folder.rename(new_path)
             print(
                 f'Folder successfully renamed: {old_folder.name} -> {selected_folder.name}\n')
         except OSError as e:
             print(
-                f'Could not rename folder {old_folder!r} -> {path/Path(renamed_folder)!r}. {e!r}')
+                f'Could not rename folder {old_folder!r} -> {new_path!r}. {e!r}')
             undo(old_folder, selected_folder)
             sys.exit(1)
         files = [f for f in selected_folder.iterdir() if f.is_file()]
