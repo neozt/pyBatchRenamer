@@ -23,16 +23,31 @@ import typer
 DEFAULT_FORMAT_TEMPLATE = '{folder} - %s'
 
 
-def main(parent_dir: str):
-    parent_dir = Path(parent_dir) if parent_dir else Path(os.getcwd())
-    folders = [f for f in parent_dir.iterdir() if f.is_dir()]
+def runner():
+    typer.run(main)
+
+
+def main(
+    path: str,
+    direct: bool = typer.Option(
+        False, help="Directly use path as target_dir instead of parent_dir.")
+):
+    """Batch rename files. If --direct is used, PATH will point directly to the
+    folder containing the files to be renamed. Otherwise, PATH points at the parent
+    directory whose folders can then be selected as the target folder."""
+    path = Path(path)
+    folders = [f for f in path.iterdir() if f.is_dir()]
 
     # Input: folder to rename
-    selected_folder = inquirer.list_input(
-        "Select folder to rename",
-        choices=[f.name for f in folders]
-    )
-    selected_folder: Path = parent_dir / selected_folder
+    selected_folder: Path = None
+    if not direct:
+        selected_folder = inquirer.list_input(
+            "Select folder to rename",
+            choices=[f.name for f in folders]
+        )
+        selected_folder = path / selected_folder
+    else:
+        selected_folder = Path(path)
 
     # Find all files in selected folder and display to user.
     files: list[Path] = [f for f in selected_folder.iterdir() if f.is_file()]
@@ -51,12 +66,12 @@ def main(parent_dir: str):
     if renamed_folder:
         try:
             selected_folder = selected_folder.rename(
-                parent_dir/Path(renamed_folder))
+                path/Path(renamed_folder))
             print(
                 f'Folder successfully renamed: {old_folder.name} -> {selected_folder.name}\n')
         except OSError as e:
             print(
-                f'Could not rename folder {old_folder!r} -> {parent_dir/Path(renamed_folder)!r}. {e!r}')
+                f'Could not rename folder {old_folder!r} -> {path/Path(renamed_folder)!r}. {e!r}')
             undo(old_folder, selected_folder)
             sys.exit(1)
         files = [f for f in selected_folder.iterdir() if f.is_file()]
@@ -120,9 +135,9 @@ def display_files(files: list[Path]):
     if len(files) < 30:
         print(*file_names, sep='\n')
     else:
-        print(*file_names[:5], sep='\n')
+        print(*file_names[:10], sep='\n')
         print('...')
-        print(*file_names[-3:], sep='\n')
+        print(*file_names[-5:], sep='\n')
     print('')
 
 
@@ -189,7 +204,7 @@ def prompt_format(default: str) -> str:
 
 
 def undo(old_folder: Path, new_folder: Path, old_files: list[Path] = [], new_files: list[Path] = []):
-    """Undo all changes to files and folder name"""
+    """Rename all files and folder back to original name."""
     for old, new in zip(old_files, new_files):
         new.rename(old)
 
@@ -197,4 +212,4 @@ def undo(old_folder: Path, new_folder: Path, old_files: list[Path] = [], new_fil
 
 
 if __name__ == '__main__':
-    typer.run(main)
+    runner()

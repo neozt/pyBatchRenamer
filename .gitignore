@@ -1,1 +1,4 @@
 renamer.bat
+__pycache__/
+*.pyc
+*.egg-info/
