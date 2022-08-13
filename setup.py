@@ -10,5 +10,5 @@ setup(
         "typer",
     ],
     entry_points={
-        'console_scripts': ['neo-renamer=batch_rename:runner']}
+        'console_scripts': ['neo-renamer=batch_rename:app']}
 )

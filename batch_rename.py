@@ -12,9 +12,7 @@ Run using: python batch_rename.py PARENT_DIR
     where PARENT_DIR is the PARENT folder of the folder that contains the batch files
     that we wish the rename. 
 """
-import os
 from pathlib import Path
-import sys
 import re
 
 import inquirer
@@ -23,38 +21,39 @@ import typer
 DEFAULT_FORMAT_TEMPLATE = '{folder} - %s'
 
 
-def runner():
-    typer.run(main)
+app = typer.Typer()
 
 
+@app.command()
 def main(
-    path: str,
+    path: Path,
     direct: bool = typer.Option(
-        False, help="Directly use path as target_dir instead of parent_dir.")
+        False,
+        '--direct', '-d',
+        help="Directly use path as target_dir instead of as parent_dir."
+    )
 ):
     """Batch rename files. If --direct is used, PATH will point directly to the
     folder containing the files to be renamed. Otherwise, PATH points at the parent
     directory whose folders can then be selected as the target folder."""
-    path = Path(path)
-    folders = [f for f in path.iterdir() if f.is_dir()]
 
     # Input: folder to rename
-    selected_folder: Path = None
+    target_folder: Path = None
     if not direct:
         selected_folder = inquirer.list_input(
             "Select folder to rename",
-            choices=[f.name for f in folders]
+            choices=[f.name for f in path.iterdir() if f.is_dir()]
         )
-        selected_folder = path / selected_folder
+        target_folder = path/selected_folder
     else:
-        selected_folder = Path(path)
+        target_folder = path
 
     # Find all files in selected folder and display to user.
-    files: list[Path] = [f for f in selected_folder.iterdir() if f.is_file()]
+    files: list[Path] = [f for f in target_folder.iterdir() if f.is_file()]
     if not files:
-        print(f"No files found in {selected_folder}. Exiting...")
-        sys.exit(0)
-    print(f'Found {len(files)} files in {selected_folder}.')
+        print(f"No files found in {target_folder}. Exiting...")
+        typer.Exit()
+    print(f'Found {len(files)} files in {target_folder}.')
     display_files(files)
 
     # Input: Rename folder to new name (Optional)
@@ -62,19 +61,20 @@ def main(
         "[Optional] Rename target folder",
         default=None
     )
-    old_folder_name = selected_folder
+    old_folder_name = target_folder
     if new_folder_name:
         try:
-            new_path = selected_folder.with_name(new_folder_name)
-            selected_folder = selected_folder.rename(new_path)
+            new_path = target_folder.with_name(new_folder_name)
+            target_folder = target_folder.rename(new_path)
             print(
-                f'Folder successfully renamed: {old_folder_name.name} -> {selected_folder.name}\n')
+                f'Folder successfully renamed: {old_folder_name.name} -> {target_folder.name}\n')
         except OSError as e:
             print(
                 f'Could not rename folder {old_folder_name!r} -> {new_path!r}. {e!r}')
-            undo(old_folder_name, selected_folder)
-            sys.exit(1)
-        files = [f for f in selected_folder.iterdir() if f.is_file()]
+            undo(old_folder_name, target_folder)
+            typer.Abort()
+
+        files = [f for f in target_folder.iterdir() if f.is_file()]
 
     # Input: Extractor used to extract id from original file name.
     input_extractor = prompt_extractor(default=guess_extractor(files))
@@ -82,11 +82,11 @@ def main(
 
     # Get input: Desired output file name format.
     try:
-        fmt = prompt_format(default=guess_format(selected_folder.name))
+        fmt = prompt_format(default=guess_format(target_folder.name))
     except ValueError as e:
         print(e)
-        undo(old_folder_name, selected_folder)
-        sys.exit(1)
+        undo(old_folder_name, target_folder)
+        typer.Abort()
 
     # Determine padding required (for sequence numbers that are numeric)
     ids = []
@@ -95,8 +95,8 @@ def main(
             ids.append(extract_id(f.stem, extractor))
         except ValueError as e:
             print(e)
-            undo(old_folder_name, selected_folder)
-            sys.exit(1)
+            undo(old_folder_name, target_folder)
+            typer.Abort()
     pad_to = 0
     if all((is_float(id) for id in ids)):
         str_lengths = (len(str(int(float(id)))) for id in ids)
@@ -117,9 +117,9 @@ def main(
             new_files.append(new_path)
         except OSError as e:
             print(f'Could not rename {file!r} -> {new_path!r}. {e!r}')
-            sys.exit(1)
+            typer.Abort()
 
-    print(f'{len(new_files)} files in {selected_folder.name} has been successfully renamed.')
+    print(f'{len(new_files)} files in {target_folder.name} has been successfully renamed.')
     changes = [f'{old.name} -> {new.name}'
                for old, new in zip(files, new_files)]
     print(*changes, sep='\n')
@@ -128,7 +128,7 @@ def main(
     confirm = inquirer.confirm('Confirm changes (n to undo changes)',
                                default=True)
     if not confirm:
-        undo(old_folder_name, selected_folder, files, new_files)
+        undo(old_folder_name, target_folder, files, new_files)
         print('Files and folders have been renamed back to their original names')
     else:
         print('Have a nice day')
@@ -197,9 +197,12 @@ def guess_format(folder_name: str) -> str:
 
 
 def prompt_format(default: str) -> str:
-    print('Enter output name format, with %s used as placeholder for sequence number. Do not include file format (Eg: .txt, .mkv).')
-    extractor = inquirer.text(message='Output name format',
-                              default=default)
+    print('Enter output name format, with %s used as placeholder for sequence number. '
+          'Do not include file format (Eg: .txt, .mkv).')
+    extractor = inquirer.text(
+        message='Output name format',
+        default=default
+    )
     print('')
     if '{' in extractor or '}' in extractor:
         raise ValueError(
@@ -225,4 +228,4 @@ def is_float(s: str) -> bool:
 
 
 if __name__ == '__main__':
-    runner()
+    typer.run(main)
