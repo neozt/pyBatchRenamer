@@ -98,12 +98,12 @@ def main(
             undo(old_folder_name, target_folder)
             typer.Abort()
     pad_to = 0
-    if all((is_float(id) for id in ids)):
+    if all((is_numeric(id) for id in ids)):
         str_lengths = (len(str(int(float(id)))) for id in ids)
         pad_to = max(str_lengths)
 
     # Sort only if sequence numbers are numeric.
-    if all((is_float(id) for id in ids)):
+    if all((is_numeric(id) for id in ids)):
         files.sort(key=lambda x: float(extract_id(x.stem, extractor)))
 
     # Rename files
@@ -218,7 +218,8 @@ def undo(old_folder: Path, new_folder: Path, old_files: list[Path] = [], new_fil
     new_folder.rename(old_folder)
 
 
-def is_float(s: str) -> bool:
+def is_numeric(s: str) -> bool:
+    """Return True if s can be converted into a float."""
     try:
         float(s)
     except ValueError:
