@@ -1,17 +1,18 @@
 """CLI used to batch rename files while preserving sequence number.
 
 The original files should have similar formatting to each other, with the only
-differing part being the sequence number. 
+differing part being the sequence number.
 
-This program will attempt to rename every file in the chosen folder by extracting 
+This program will attempt to rename every file in the chosen folder by extracting
 the sequence number out from the original names based on an input mask (extractor)
 provided by the user (or automatically inferred by the program) and then combining
 the extracted seq num with the user provided template to generate the target name.
 
-Run using: python batch_rename.py PARENT_DIR
-    where PARENT_DIR is the PARENT folder of the folder that contains the batch files
-    that we wish the rename. 
+Build by running python setup develop. Help can be found by running neo-renamer --help.
 """
+from wsgiref import validate
+from xml.dom import ValidationErr
+from inquirer.errors import ValidationError
 from pathlib import Path
 import re
 
@@ -19,7 +20,6 @@ import inquirer
 import typer
 
 DEFAULT_FORMAT_TEMPLATE = '{folder} - %s'
-
 
 app = typer.Typer()
 
@@ -33,20 +33,26 @@ def main(
         help="Directly use path as target_dir instead of as parent_dir."
     )
 ):
-    """Batch rename files. If --direct is used, PATH will point directly to the
+    """
+    Batch rename files. If --direct is used, PATH will point directly to the
     folder containing the files to be renamed. Otherwise, PATH points at the parent
-    directory whose folders can then be selected as the target folder."""
+    directory whose folders can then be selected as the target folder.
+    """
 
-    # Input: folder to rename
+    # Get target_folder.
+    path = path.resolve()
     target_folder: Path = None
-    if not direct:
+    if direct:
+        # PATH points directly to target_folder.
+        target_folder = path
+    else:
+        # PATH points to parent directory of target_folder.
+        # Prompt user to manually select target_folder from the folders within PATH.
         selected_folder = inquirer.list_input(
             "Select folder to rename",
             choices=[f.name for f in path.iterdir() if f.is_dir()]
         )
         target_folder = path/selected_folder
-    else:
-        target_folder = path
 
     # Find all files in selected folder and display to user.
     files: list[Path] = [f for f in target_folder.iterdir() if f.is_file()]
@@ -63,75 +69,53 @@ def main(
     )
     old_folder_name = target_folder
     if new_folder_name:
-        try:
-            new_path = target_folder.with_name(new_folder_name)
-            target_folder = target_folder.rename(new_path)
+        new_folder = old_folder_name.with_name(new_folder_name)
+        err = rename_folder(target_folder, new_folder)
+        if not err:
             print(
                 f'Folder successfully renamed: {old_folder_name.name} -> {target_folder.name}\n')
-        except OSError as e:
+            target_folder = new_folder
+            files = [f for f in target_folder.iterdir() if f.is_file()]
+        else:
             print(
-                f'Could not rename folder {old_folder_name!r} -> {new_path!r}. {e!r}')
-            undo(old_folder_name, target_folder)
+                f'Could not rename folder {old_folder_name!r} -> {new_folder!r}. {err!r}')
+            undo_renames(old_folder_name, target_folder)
             typer.Abort()
-
-        files = [f for f in target_folder.iterdir() if f.is_file()]
 
     # Input: Extractor used to extract id from original file name.
-    input_extractor = prompt_extractor(default=guess_extractor(files))
-    extractor = extractor_regex(input_extractor)
+    extractor = prompt_extractor(files)
 
-    # Get input: Desired output file name format.
-    try:
-        fmt = prompt_format(default=guess_format(target_folder.name))
-    except ValueError as e:
-        print(e)
-        undo(old_folder_name, target_folder)
-        typer.Abort()
-
-    # Determine padding required (for sequence numbers that are numeric)
-    ids = []
-    for f in files:
-        try:
-            ids.append(extract_id(f.stem, extractor))
-        except ValueError as e:
-            print(e)
-            undo(old_folder_name, target_folder)
-            typer.Abort()
-    pad_to = 0
-    if all((is_numeric(id) for id in ids)):
-        str_lengths = (len(str(int(float(id)))) for id in ids)
-        pad_to = max(str_lengths)
-
-    # Sort only if sequence numbers are numeric.
-    if all((is_numeric(id) for id in ids)):
+    # Seq nums can either be all numeric or not
+    ids = [extract_id(f.stem, extractor) for f in files]
+    if all(is_numeric(id) for id in ids):
+        # Padding for all seq nums so that they will be equal length.
+        padding = max_int_len(ids)
+        # Sort based on seq nums for user convenience.
         files.sort(key=lambda x: float(extract_id(x.stem, extractor)))
+    else:
+        padding = 0
+
+    # Get input: Desired output file name template.
+    output_template = prompt_template(
+        default=guess_template(target_folder.name))
 
     # Rename files
-    new_files: list[Path] = []
-    for file in files:
-        new_name = fmt.format(id=extract_id(
-            file.stem, extractor).zfill(pad_to))
-        new_path = file.with_stem(new_name)
-        try:
-            new_path = file.rename(new_path)
-            new_files.append(new_path)
-        except OSError as e:
-            print(f'Could not rename {file!r} -> {new_path!r}. {e!r}')
-            typer.Abort()
-
+    new_files = rename_files(files, extractor, output_template, padding)
     print(f'{len(new_files)} files in {target_folder.name} has been successfully renamed.')
     changes = [f'{old.name} -> {new.name}'
                for old, new in zip(files, new_files)]
     print(*changes, sep='\n')
 
     # Prompt for undo.
-    confirm = inquirer.confirm('Confirm changes (n to undo changes)',
-                               default=True)
+    confirm = inquirer.confirm(
+        'Confirm changes (n to undo changes)',
+        default=True
+    )
     if not confirm:
-        undo(old_folder_name, target_folder, files, new_files)
+        undo_renames(old_folder_name, target_folder, files, new_files)
         print('Files and folders have been renamed back to their original names')
     else:
-        print('Have a nice day')
+        print('Completed! Have a nice day.')
 
 
 def display_files(files: list[Path]):
@@ -145,12 +129,29 @@ def display_files(files: list[Path]):
     print('')
 
 
-def prompt_extractor(default: str = None) -> str:
-    print('Enter original name format, with the sequence number portion replaced with %s. Do no include file format (Eg: .txt, .mkv)')
-    extractor = inquirer.text(message='Original name format',
-                              default=default)
-    print('')
-    return extractor
+def prompt_extractor(files) -> str:
+    def validate_extractor(answers: dict, current: str) -> bool:
+        """Check that a seq num can be extracted from every file in files."""
+        extractor = extractor_regex(current)
+        for f in files:
+            try:
+                extract_id(f.stem, extractor)
+            except ValueError as e:
+                raise ValidationError(
+                    '',
+                    reason=('Could not extract id from file "{}" '
+                            'using extractor <{}>'.format(f.stem, current))
+                )
+        return True
+
+    print('Enter original name format, with the sequence number portion replaced with %s. '
+          'Do not include file format (Eg: .txt, .mkv)')
+    extractor = inquirer.text(
+        message='Original name format',
+        default=guess_extractor(files),
+        validate=validate_extractor
+    )
+    return extractor_regex(extractor)
 
 
 def guess_extractor(files: list[Path]) -> str:
@@ -169,8 +170,8 @@ def guess_extractor(files: list[Path]) -> str:
 def extractor_regex(extractor: str) -> str:
     """Return a sanitised regex used for extracting the sequence number.
 
-    Creates a regex that can be used to match a string sequence to extract the 
-    desired value at the position mark with (.*). Also sanitises the input by 
+    Creates a regex that can be used to match a string sequence to extract the
+    desired value at the position mark with (.*). Also sanitises the input by
     escaping special regex characters.
     For example, 'file name - %s.abc' -> 'file\\ name\\ \\-\\ (.*)\\.abc'.
     """
@@ -191,26 +192,31 @@ def extract_id(filename: str, extractor: str) -> str:
     return match.group(1)
 
 
-def guess_format(folder_name: str) -> str:
+def guess_template(folder_name: str) -> str:
     """Guess format based on name of folder."""
     return DEFAULT_FORMAT_TEMPLATE.format(folder=folder_name)
 
 
-def prompt_format(default: str) -> str:
-    print('Enter output name format, with %s used as placeholder for sequence number. '
+def prompt_template(default: str) -> str:
+    def validate(answers: dict, current: str) -> bool:
+        if '{' in current or '}' in current:
+            # Inquirer internall calls .format when displaying reason,
+            # so we need to escape { and } characters.
+            raise ValidationError(
+                '', reason='Output format cannot contain {{ or }}')
+        return True
+
+    print('Enter output name template, with %s used as placeholder for sequence number. '
           'Do not include file format (Eg: .txt, .mkv).')
-    extractor = inquirer.text(
+    fmt = inquirer.text(
         message='Output name format',
-        default=default
+        default=default,
+        validate=validate
     )
-    print('')
-    if '{' in extractor or '}' in extractor:
-        raise ValueError(
-            'Output name format cannot contain characters { or }.')
-    return extractor.replace('%s', '{id}')
+    return fmt.replace('%s', '{id}')
 
 
-def undo(old_folder: Path, new_folder: Path, old_files: list[Path] = [], new_files: list[Path] = []):
+def undo_renames(old_folder: Path, new_folder: Path, old_files: list[Path] = [], new_files: list[Path] = []):
     """Rename all files and folder back to original name."""
     for old, new in zip(old_files, new_files):
         new.rename(old)
@@ -226,6 +232,50 @@ def is_numeric(s: str) -> bool:
         return False
 
     return True
+
+
+def max_int_len(numbers: list[float | int]) -> int:
+    """Determine the length of the largest number in numbers when represented as a string,
+    after converting every number into int."""
+    return len(str(max(int(n) for n in numbers)))
+
+
+def validate_extractor(extractor: str, files: list[Path]) -> bool:
+    """Validate that extractor can be used to extract a valid seq num
+    from all files in files.
+    """
+    for f in files:
+        try:
+            extract_id(f.stem, extractor)
+        except ValueError:
+            return False
+    return True
+
+
+def rename_files(files: list[Path], extractor: str, output_template: str, padding: int) -> list[Path]:
+    """Rename files in files according to output_template, based on seq_num extracted from
+    original name using extractor. Returns a list of the renamed path instances in the
+    same order as the original files."""
+    new_files = []
+    for file in files:
+        seq_num = extract_id(file.stem, extractor).zfill(padding)
+        new_name = output_template.format(id=seq_num)
+        new_path = file.with_stem(new_name)
+        try:
+            new_path = file.rename(new_path)
+            new_files.append(new_path)
+        except OSError as e:
+            print(f'Could not rename {file!r} -> {new_path!r}. {e!r}')
+            typer.Abort()
+    return new_files
+
+
+def rename_folder(folder: Path, new_folder: Path) -> str | None:
+    """Renames folder to new_name and returns the error message if the operation was not succesful."""
+    try:
+        new_folder = folder.rename(new_folder)
+    except OSError as e:
+        return str(e)
 
 
 if __name__ == '__main__':
