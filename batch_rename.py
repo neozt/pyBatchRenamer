@@ -10,8 +10,6 @@ the extracted seq num with the user provided template to generate the target nam
 
 Build by running python setup develop. Help can be found by running neo-renamer --help.
 """
-from wsgiref import validate
-from xml.dom import ValidationErr
 from inquirer.errors import ValidationError
 from pathlib import Path
 import re
