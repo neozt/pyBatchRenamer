@@ -1,7 +1,7 @@
-# pyBatchneo_renamer
+# neo-renamer
 #### Command Line Interface used to batch rename files within a folder to a new naming format while preserving original sequence number.
 
-This CLI is created to ease the process of batch renaming multiple files in a folder that share a common naming format, while differing from each other by a certain sequence number. The program extracts this sequence number based on a mask provided by the user (or automatically inferred by the program) and proceeds to rename each file to the desired output format incorporating the same sequence number as the original.
+This CLI was built using the Typer library in Python to ease the process of batch renaming multiple files in a folder that share a common naming format, while differing from each other by a certain sequence number. The program extracts this sequence number based on a mask provided by the user (or automatically inferred by the program) and proceeds to rename each file to the desired output format incorporating the same sequence number as the original.
 
 For example, the following renaming can be done easily:
 image01.img, image02.img, image03.img -> Hawaii - 1.img, Hawaii - 2.img, Hawaii - 3.img.
@@ -9,31 +9,17 @@ image01.img, image02.img, image03.img -> Hawaii - 1.img, Hawaii - 2.img, Hawaii 
 ![CLI Demo](assets/demo.gif)
 ___
 ## How to use
+This project supports building using setuptools. The steps are simple:
 1. Clone the repository
-2. `pip install inquirer typer`
-3. `python batch_rename.py PATH`, where `PATH` is the parent folder of the folder that contains the batch files that you want to rename.
+2. Run `python setup.py develop`
 
-This will initiate the CLI, which will take you through the following steps:
-  1. Select the target folder.
-  2. Optionally rename the target folder (Leave empty to skip this step).
-  3. Input the extractor mask used to extract the seq num from the original names, with %s as placeholder for the sequence number.
-  4. Input the output format you want the files to be renamed to, again with %s as placeholder for the sequence number.
-  5. Inspect the changes and confirm if it is want you wanted. If not, type n and the program will undo all changes made to files and folder names.
-
-
-### Alternative: Building using Setuptools
-pyBatchneo_renamer now supports building into a CLI utility tool that can be run from anywhere without the use of a bat script.
-
-How to setup:
-1. Run `python setup.py develop`
-
-Now, `neo_renamer PATH` can be called from anywhere. Also supports relative paths, eg: `neo_renamer .`, `neo_renamer ..`, `neo_renamer .\tests`, etc. 
+Now, `neo-renamer PATH` can be called from anywhere. Also supports relative paths, eg: `neo-renamer .`, `neo-renamer ..`, `neo-renamer .\tests`, etc. 
 Additionally, it supports the `--direct` flag, which causes the program to treat the input `PATH` argument directly as the target folder, instead of the parent folder that we need to select the target folder from, effectively allowing us to skip the first selection step.
 
-Additional info is available by running `neo_renamer --help` command.
+Additional info is available by running `neo-renamer --help` command.
 ```
->>> neo_renamer --help
-Usage: neo_renamer [OPTIONS] PATH
+>>> neo-renamer --help
+Usage: neo-renamer [OPTIONS] PATH
 
   Batch rename files. If --direct is used, PATH will point directly to the
   folder containing the files to be renamed. Otherwise, PATH points at the
@@ -43,8 +29,8 @@ Arguments:
   PATH  [required]
 
 Options:
-  --direct / --no-direct          Directly use path as target_dir instead of
-                                  parent_dir.  [default: no-direct]
+  -d, --direct                    Directly use path as target_dir instead of
+                                  as parent_dir.
   --install-completion [bash|zsh|fish|powershell|pwsh]
                                   Install completion for the specified shell.
   --show-completion [bash|zsh|fish|powershell|pwsh]

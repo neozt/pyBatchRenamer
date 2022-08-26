@@ -10,11 +10,11 @@ the extracted seq num with the user provided template to generate the target nam
 
 Build by running python setup develop. Help can be found by running neo-renamer --help.
 """
-from inquirer.errors import ValidationError
 from pathlib import Path
 import re
 
 import inquirer
+from inquirer.errors import ValidationError
 import typer
 
 DEFAULT_FORMAT_TEMPLATE = '{folder} - %s'
@@ -70,9 +70,9 @@ def main(
         new_folder = old_folder_name.with_name(new_folder_name)
         err = rename_folder(target_folder, new_folder)
         if not err:
+            target_folder = new_folder
             print(
                 f'Folder successfully renamed: {old_folder_name.name} -> {target_folder.name}\n')
-            target_folder = new_folder
             files = [f for f in target_folder.iterdir() if f.is_file()]
         else:
             print(
@@ -198,7 +198,7 @@ def guess_template(folder_name: str) -> str:
 def prompt_template(default: str) -> str:
     def validate(answers: dict, current: str) -> bool:
         if '{' in current or '}' in current:
-            # Inquirer internall calls .format when displaying reason,
+            # inquirer internally calls .format when displaying reason,
             # so we need to escape { and } characters.
             raise ValidationError(
                 '', reason='Output format cannot contain {{ or }}')
@@ -274,6 +274,8 @@ def rename_folder(folder: Path, new_folder: Path) -> str | None:
         new_folder = folder.rename(new_folder)
     except OSError as e:
         return str(e)
+
+    return None
 
 
 if __name__ == '__main__':
